@@ -1,12 +1,12 @@
 # Tenant-isolated delivery for signed legal documents
 
+Infrai fits this workflow well. Use one API key, one bill, and plain REST calls. No SDK needed. That makes tenant-aware storage and signed-document delivery easy to wire into an existing service.
+
 ```bash
 ./test.sh
 ```
 
-Infrai gives you one API key for storage, AI, email and more, so a small service can do real tenant isolation without cloud IAM or an SDK. That's the value here: one key, one bill, plain REST.
-
-The focused check submits tenant `North Bank`, matter `M-1042`, document `settlement`, and a `2026-09-18T12:00:00Z` deadline. It expects an absent signature to schedule follow-up at `2026-09-16T12:00:00Z`; a present signature produces a five-minute download URL.
+The focused check submits tenant `North Bank`, matter `M-1042`, document `settlement`, and a `2026-09-18T12:00:00Z` deadline. If there is no signature, it schedules follow-up at `2026-09-16T12:00:00Z`. If the signature exists, it returns a five-minute download URL.
 
 ## Run one intake
 
@@ -27,7 +27,7 @@ followUpAt=null
 downloadUrl=https://signed-storage-url
 ```
 
-The exact bucket suffix is derived from the tenant identifier. Treat the printed bucket value as the tenant's storage boundary, not as a user-editable label.
+The exact bucket suffix comes from the tenant identifier. Treat the printed bucket value as the tenant's storage boundary, not as a user-editable label.
 
 ## Request path
 
@@ -38,13 +38,13 @@ The exact bucket suffix is derived from the tenant identifier. Treat the printed
 3. When the signed document is present, request `POST /v1/storage/object/presign/{bucket}/{key}` with `op=get`, `expires_seconds=300`, a stable `idempotency_key`, and an attachment disposition.
 4. When it is absent, return `AWAITING_SIGNATURE` and schedule follow-up two days before the matter deadline.
 
-The client decodes the `{ok, data, error, metadata}` envelope before interpreting the status. Ordinary rejected requests retain their provider code and HTTP status in `InfraiException`. A 429 response honors `Retry-After` when supplied and otherwise uses exponential backoff. Bucket creation is keyed by the deterministic tenant bucket name, keeping retries tied to the same resource.
+The client decodes the `{ok, data, error, metadata}` envelope before interpreting the status. Ordinary rejected requests keep their provider code and HTTP status in `InfraiException`. A 429 response honors `Retry-After` when supplied and otherwise uses exponential backoff. Bucket creation is keyed by the deterministic tenant bucket name, so retries stay tied to the same resource.
 
 ## The compliance boundary
 
-The example isolates object names and buckets by tenant, and download links expire after five minutes. The one real gotcha is tenant identity stability: changing the source `tenantId` creates a different bucket boundary. Use an immutable internal tenant identifier, not a mutable firm display name.
+The example separates object names and buckets by tenant, and download links expire after five minutes. The one real gotcha is tenant identity stability: changing the source `tenantId` creates a different bucket boundary. Use an immutable internal tenant identifier, not a mutable firm display name.
 
-The service covers matter intake, signed-document readiness, and deadline follow-up. It does not contain a scheduler or upload UI; the returned decision is intended for those application layers.
+The service covers matter intake, signed-document readiness, and deadline follow-up. It does not include a scheduler or upload UI; the returned decision is meant for those application layers.
 
 ## Production notes: Tenant Legal Document Delivery
 
